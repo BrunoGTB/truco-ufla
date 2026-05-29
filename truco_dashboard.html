@@ -266,14 +266,31 @@ function showError(msg) {
 
 function pct(v, d) { return d === 0 ? 0 : Math.round(v / d * 100); }
 
+function isValid(v) {
+  if (v === null || v === undefined) return false;
+  const s = String(v).trim();
+  return s !== '' && s !== '-' && s !== '–' && s !== '—';
+}
+
 function computeStats(partidas) {
   const eq = {}, jog = {};
-  const getEq = n => { if (!n) return null; if (!eq[n]) eq[n] = {nome:n,v:0,d:0,pts:0,ptsCon:0,baixo:0,ganhouDe:{},perdeuPara:{},historico:[]}; return eq[n]; };
-  const getJog = n => { if (!n) return null; if (!jog[n]) jog[n] = {nome:n,v:0,d:0,pts:0,ptsCon:0,baixo:0}; return jog[n]; };
+  const getEq = n => {
+    if (!isValid(n)) return null;
+    const name = String(n).trim();
+    if (!eq[name]) eq[name] = {nome:name,v:0,d:0,pts:0,ptsCon:0,baixo:0,ganhouDe:{},perdeuPara:{},historico:[]};
+    return eq[name];
+  };
+  const getJog = n => {
+    if (!isValid(n)) return null;
+    const name = String(n).trim();
+    if (!jog[name]) jog[name] = {nome:name,v:0,d:0,pts:0,ptsCon:0,baixo:0};
+    return jog[name];
+  };
 
   partidas.forEach(p => {
     const dA = findCol(p,'DuplaA','Dupla A','duplaA');
     const dB = findCol(p,'DuplaB','Dupla B','duplaB');
+    if (!isValid(dA) || !isValid(dB)) return;
     const pA = parseFloat(findCol(p,'PontosA','Pontos Dupla A','PontosDuplaA') || 0);
     const pB = parseFloat(findCol(p,'PontosB','Pontos Dupla B','PontosDuplaB') || 0);
     const j1A = findCol(p,'JogadorA1','Jogador A1');
@@ -303,8 +320,8 @@ function computeStats(partidas) {
       [j1B,j2B].filter(Boolean).forEach(j=>{const jd=getJog(j);jd.v++;jd.pts+=pB;jd.ptsCon+=pA;});
       [j1A,j2A].filter(Boolean).forEach(j=>{const jd=getJog(j);jd.d++;jd.pts+=pA;jd.ptsCon+=pB;});
     }
-    const pb = passou && String(passou).toLowerCase() !== 'false' && String(passou).toLowerCase() !== 'não' && String(passou) !== '0';
-    if (pb && quem) { const eQ = getEq(quem); if(eQ) eQ.baixo++; const jQ = getJog(quem); if(jQ) jQ.baixo++; }
+    const passouStr = String(passou||'').trim().toLowerCase(); const pb = isValid(passou) && passouStr !== 'false' && passouStr !== 'não' && passouStr !== 'nao' && passouStr !== '0' && passouStr !== 'n';
+    if (pb && isValid(quem)) { const eQ = getEq(quem); if(eQ) eQ.baixo++; const jQ = getJog(quem); if(jQ) jQ.baixo++; }
   });
 
   Object.values(eq).forEach(e => {
@@ -329,7 +346,7 @@ function buildAll() {
 }
 
 function renderMetrics(eqArr, jogArr) {
-  const total = gPartidas.length;
+  const total = gPartidas.filter(p => isValid(findCol(p,'DuplaA','Dupla A','duplaA')) && isValid(findCol(p,'DuplaB','Dupla B','duplaB'))).length;
   const lider = eqArr[0];
   const mvp = jogArr[0];
   const maiorBaixo = [...eqArr].sort((a,b)=>b.baixo-a.baixo)[0];
@@ -407,7 +424,7 @@ function renderJogadores(jogArr) {
 }
 
 function renderPartidas(partidas) {
-  const recentes = [...partidas].reverse().slice(0,60);
+  const recentes = [...partidas].filter(p => isValid(findCol(p,'DuplaA','Dupla A','duplaA')) && isValid(findCol(p,'DuplaB','Dupla B','duplaB'))).reverse().slice(0,60);
   const rows = recentes.map(p=>{
     const dA=findCol(p,'DuplaA','Dupla A')||'?';
     const dB=findCol(p,'DuplaB','Dupla B')||'?';
@@ -416,7 +433,7 @@ function renderPartidas(partidas) {
     const data=findCol(p,'Data')||'';
     const passou=findCol(p,'PassouporBaixo','Passou por Baixo','PassouBaixo');
     const quem=findCol(p,'QuemPassou','Quem Passou');
-    const pb = passou && String(passou).toLowerCase()!=='false' && String(passou).toLowerCase()!=='não' && String(passou)!=='0';
+    const passouStr2 = String(passou||'').trim().toLowerCase(); const pb = isValid(passou) && passouStr2 !== 'false' && passouStr2 !== 'não' && passouStr2 !== 'nao' && passouStr2 !== '0' && passouStr2 !== 'n';
     const win = pA>pB?'A':pB>pA?'B':null;
     return `<tr>
       <td style="font-family:var(--font-mono);font-size:11px;color:var(--muted);">${String(data).substring(0,10)}</td>
@@ -544,7 +561,7 @@ function renderCharts() {
 (function fixMetrics() {
   const orig = renderMetrics;
   window.renderMetrics = function(eqArr, jogArr) {
-    const total = gPartidas.length;
+    const total = gPartidas.filter(p => isValid(findCol(p,'DuplaA','Dupla A','duplaA')) && isValid(findCol(p,'DuplaB','Dupla B','duplaB'))).length;
     const lider = eqArr[0];
     const mvp = jogArr[0];
     const maiorBaixo = [...eqArr].sort((a,b)=>b.baixo-a.baixo)[0];
