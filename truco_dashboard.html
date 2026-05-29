@@ -195,6 +195,7 @@
 <script>
 let gStats = null;
 let gPartidas = [];
+let gEquipes = [];
 let charts = [];
 
 function showTab(name, btn) {
@@ -240,12 +241,13 @@ async function loadData() {
   document.getElementById('loadingEl').style.display = 'block';
 
   try {
-    const [, , partidas] = await Promise.all([
+    const [equipes, , partidas] = await Promise.all([
       fetchSheet(id, tabE).catch(() => []),
       fetchSheet(id, tabJ).catch(() => []),
       fetchSheet(id, tabP)
     ]);
     gPartidas = partidas;
+    gEquipes = equipes;
     gStats = computeStats(partidas);
     document.getElementById('loadingEl').style.display = 'none';
     document.getElementById('dashContent').style.display = 'block';
@@ -270,6 +272,22 @@ function isValid(v) {
   if (v === null || v === undefined) return false;
   const s = String(v).trim();
   return s !== '' && s !== '-' && s !== '–' && s !== '—';
+}
+
+function formatDate(v) {
+  if (!v) return '—';
+  const s = String(v).trim();
+  // Google Sheets returns Date(year,month0,day)
+  const m = s.match(/Date\((\d+),(\d+),(\d+)\)/);
+  if (m) {
+    const d = String(m[3]).padStart(2,'0');
+    const mo = String(parseInt(m[2])+1).padStart(2,'0');
+    return d+'/'+mo+'/'+m[1];
+  }
+  // Already formatted or ISO
+  if (s.includes('/')) return s;
+  if (s.includes('-')) { const p=s.split('-'); if(p.length===3) return p[2]+'/'+p[1]+'/'+p[0]; }
+  return s;
 }
 
 function computeStats(partidas) {
@@ -304,7 +322,7 @@ function computeStats(partidas) {
     if (!eA || !eB) return;
     eA.pts += pA; eA.ptsCon += pB;
     eB.pts += pB; eB.ptsCon += pA;
-    const dateStr = data ? String(data).substring(0,10) : null;
+    const dateStr = formatDate(data);
     if (pA > pB) {
       eA.v++; eB.d++;
       eA.ganhouDe[dB] = (eA.ganhouDe[dB]||0)+1;
@@ -364,14 +382,33 @@ function renderEquipes(eqArr) {
   if (!eqArr.length) { document.getElementById('tab-equipes').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">Nenhuma equipe encontrada.</div>'; return; }
   const maxV = Math.max(...eqArr.map(e=>e.v), 1);
   const medals = ['🥇','🥈','🥉'];
+
+  // Build lookup from gEquipes sheet
+  const eqInfo = {};
+  gEquipes.forEach(row => {
+    const nome = findCol(row, 'Nome', 'nome');
+    if (!isValid(nome)) return;
+    const j1 = findCol(row, 'Jogador 1', 'jogador1', 'Jogador1');
+    const j2 = findCol(row, 'Jogador 2', 'jogador2', 'Jogador2');
+    const fund = findCol(row, 'Data de Fundação', 'Fundação', 'fundacao', 'Data');
+    eqInfo[String(nome).trim()] = { j1, j2, fund };
+  });
+
   const rows = eqArr.map((e,i)=>{
     const total = e.v+e.d;
     const wp = pct(e.v, total);
     const bW = Math.round(e.v/maxV*80);
     const bL = Math.round(e.d/maxV*80);
     const medal = i<3 ? `<span class="medal">${medals[i]}</span>` : `<span class="rank">#${i+1}</span>`;
+    const info = eqInfo[e.nome] || {};
+    const jogadores = [info.j1, info.j2].filter(isValid).join(' & ') || '—';
+    const fundacao = info.fund ? formatDate(info.fund) : '—';
     return `<tr>
-      <td>${medal} <span class="team-name">${e.nome}</span></td>
+      <td>
+        ${medal} <span class="team-name">${e.nome}</span>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;font-family:var(--font-mono);">${jogadores}</div>
+        ${fundacao !== '—' ? `<div style="font-size:10px;color:var(--muted);margin-top:1px;">fundada em ${fundacao}</div>` : ''}
+      </td>
       <td><span class="wins">${e.v}</span></td>
       <td><span class="losses">${e.d}</span></td>
       <td><span class="pct" style="color:${wp>=50?'var(--green)':'var(--red)'}">${wp}%</span></td>
@@ -388,7 +425,7 @@ function renderEquipes(eqArr) {
       <div class="card-title"><span>▶</span> Ranking de equipes</div>
       <div class="tbl-wrap"><table>
         <thead><tr>
-          <th>Equipe</th><th>V</th><th>D</th><th>%</th><th>V/D</th>
+          <th>Equipe / Jogadores</th><th>V</th><th>D</th><th>%</th><th>V/D</th>
           <th>Pts+</th><th>Pts−</th><th>Passou Baixo</th>
           <th>🦆 Pato favorito</th><th>😤 Cafetão</th>
         </tr></thead>
@@ -436,7 +473,7 @@ function renderPartidas(partidas) {
     const passouStr2 = String(passou||'').trim().toLowerCase(); const pb = isValid(passou) && passouStr2 !== 'false' && passouStr2 !== 'não' && passouStr2 !== 'nao' && passouStr2 !== '0' && passouStr2 !== 'n';
     const win = pA>pB?'A':pB>pA?'B':null;
     return `<tr>
-      <td style="font-family:var(--font-mono);font-size:11px;color:var(--muted);">${String(data).substring(0,10)}</td>
+      <td style="font-family:var(--font-mono);font-size:11px;color:var(--muted);">${formatDate(data)}</td>
       <td style="${win==='A'?'color:var(--green);font-weight:700':win==='B'?'color:var(--red)':''}">${dA}</td>
       <td style="text-align:center;"><span class="score-box">${pA} × ${pB}</span></td>
       <td style="${win==='B'?'color:var(--green);font-weight:700':win==='A'?'color:var(--red)':''}">${dB}</td>
